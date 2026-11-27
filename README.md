@@ -1,68 +1,88 @@
-# Bank Marketing Analytics and Subscription Prediction
+# NYC Taxi Trips: Big Data Analytics with Apache Spark
 
-## Project at a glance
+## Project overview
 
-- **Problem:** Analyze direct-marketing campaigns by a Portuguese banking institution and estimate whether a client will subscribe to a term deposit.
-- **Dataset:** UCI Machine Learning Repository, [Bank Marketing (ID 222)](https://archive.ics.uci.edu/dataset/222/bank+marketing).
-- **Target:** `y` (`yes` / `no`).
-- **Processing and models:** Local Apache Spark / PySpark.
-- **Dashboard:** Streamlit.
-- **Modeling decision:** `duration` is deliberately excluded. UCI notes that call duration is not known before the call and strongly affects the outcome, so using it for a pre-call model would create target leakage.
+- **Problem:** Analyze demand, routes, fares, and trip durations across NYC TLC Yellow Taxi records, then estimate metered fare from trip and route attributes.
+- **Dataset:** Official NYC Taxi & Limousine Commission (TLC) monthly Parquet trip records and taxi-zone lookup.
+- **Big-data approach:** Spark reads real monthly Parquet files directly, processes every selected trip with DataFrame transformations, SQL, joins, aggregations, window functions, correlation, and Spark ML. The dashboard receives only compact aggregate exports and a bounded model-evaluation sample.
+- **Dashboard:** Streamlit with date, borough, and hour filters.
+- **Default scale:** January 2024 Yellow Taxi Parquet (about 50 MB compressed); add months to scale to tens of millions of trips.
 
-## Project layout
+## Architecture
+
+```text
+NYC TLC monthly Parquet + zone lookup CSV
+                   │
+                   ▼
+       PySpark distributed ingestion
+                   │
+   quality filters + derived time features
+       broadcast pickup/dropoff joins
+                   │
+       Spark SQL + grouped analytics
+       window-ranked zones and routes
+                   │
+  sampled train/evaluation Spark ML models
+                   │
+ compact CSV/JSON artifacts ──► Streamlit
+```
+
+The sample month is a slice of a much larger, continuously published TLC
+dataset. This project uses actual trip records, not synthetic row expansion.
+Choose more source months to increase the real workload. On a cluster, provide
+a Spark master and make the input paths accessible to the driver and workers.
+
+## Repository structure
 
 ```text
 .
-├── app.py                         # Streamlit dashboard
-├── data/
-│   └── raw/                        # Downloaded source data (not committed)
-├── outputs/                        # Generated Spark exports (not committed)
-├── pyproject.toml
+├── app.py
+├── data/raw/taxi/                  # Downloaded TLC files (git-ignored)
+├── outputs/taxi/                   # Generated aggregates and model metrics (git-ignored)
+├── PRESENTATION.md
 ├── README.md
 ├── REPORT.md
-├── PRESENTATION.md                 # Slide outline and live-demo checklist
-└── src/
-    └── bank_marketing/
-        └── pipeline.py             # Loading, QA, Spark EDA, ML and exports
+├── pyproject.toml
+└── src/taxi_analytics/pipeline.py
 ```
 
-## Dataset, schema, and attribution
+## Dataset source, schema, and attribution
 
-The official UCI CSV contains 45,211 examples and 17 columns: `age`, `job`,
-`marital`, `education`, `default`, `balance`, `housing`, `loan`, `contact`,
-`day_of_week` (the numeric day of month in the source), `month`, `duration`,
-`campaign`, `pdays`, `previous`, `poutcome`, and target `y`. Inputs include
-integer-valued measures and categorical strings; source missing values are
-represented as `NaN`. `pdays = -1` represents no previous contact. UCI's page
-documents each field and the research context.
+NYC TLC publishes monthly Yellow Taxi trip records as Parquet. The default
+source is
+[`yellow_tripdata_2024-01.parquet`](https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2024-01.parquet).
+The official trip-record landing page is
+[NYC TLC Trip Record Data](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page).
+Zone IDs are enriched using TLC's
+[taxi_zone_lookup.csv](https://d37ci6vzurychx.cloudfront.net/misc/taxi_zone_lookup.csv).
+The pipeline records the actual inferred schema and source-row count at run
+time because TLC's fields may change between data vintages.
 
-The dataset is attributed to Sérgio Moro, Paulo Rita, and Paulo Cortez,
-"A data-driven approach to predict the success of bank telemarketing,"
-*Decision Support Systems* (2014), DOI
-[10.1016/j.dss.2014.03.001](https://doi.org/10.1016/j.dss.2014.03.001).
-The dataset DOI is [10.24432/C5K306](https://doi.org/10.24432/C5K306).
-Review the current UCI dataset page for its applicable use and redistribution
-terms. The pipeline downloads data directly from UCI; raw data and generated
-outputs are excluded from version control.
+The model target is `fare_amount` (USD). Useful source fields include pickup
+and dropoff timestamps, passenger count, trip distance, rate code, vendor,
+pickup/dropoff zone IDs, payment type, and fare. The pipeline computes trip
+duration, hour, day of week, month, and weekend indicators. It excludes
+`total_amount`, tips, tolls, and other fare components from model inputs to
+avoid target leakage. Extreme/invalid durations, distances, fares, missing
+timestamps, and missing zone IDs are filtered with explicit counts.
 
-The UCI dataset API metadata does not expose a dataset-specific license field
-for this entry. Attribution is provided above; treat reuse and redistribution
-terms as unspecified until confirmed on the [UCI dataset page](https://archive.ics.uci.edu/dataset/222/bank+marketing)
-or with UCI. Do not assume that public availability alone grants redistribution
-rights.
+TLC's public data page provides data dictionaries and usage notes; review the
+current TLC terms and any applicable notices before redistribution. This
+repository downloads source files on demand and does not commit the data.
+Attribute the source as **NYC Taxi & Limousine Commission (TLC), Yellow Taxi
+Trip Records**.
 
 ## Team requirement
 
-The project brief requires a team of **5–7 students**. Team membership was not
-provided for this workspace; add the actual members to the team line in
-[PRESENTATION.md](./PRESENTATION.md) before submission. Do not submit the
-placeholder as a roster.
+The course brief calls for a team of **5–7 students**. Team names were not
+provided for this workspace. Add the actual roster to the team line in
+[PRESENTATION.md](./PRESENTATION.md) before submitting.
 
-## Requirements and setup
+## Requirements and installation
 
 - Python 3.10+
-- Java 8 or later supported by the selected PySpark release (Java 17 is recommended)
-- The project Python dependencies listed in `pyproject.toml`
+- Java 8+ supported by the installed Spark release (Java 17 recommended)
+- Spark 3.5.x (installed by project dependencies)
 
 ```powershell
 py -3.11 -m venv .venv
@@ -71,71 +91,87 @@ python -m pip install --upgrade pip
 python -m pip install -e .
 ```
 
-The first pipeline run downloads the official CSV to `data/raw/bank_marketing.csv`.
-For an offline/manual setup, download the UCI CSV and specify its path with
-`--input`.
-
 ## Run the Spark pipeline
 
-From the project root (with the environment activated):
+Default: download/process the 2024-01 Yellow Taxi file and current zone lookup.
 
 ```powershell
-python -m bank_marketing.pipeline
+python -m taxi_analytics.pipeline
 ```
 
-Optional paths:
+Scale the real source workload by selecting additional months:
 
 ```powershell
-python -m bank_marketing.pipeline --input .\data\raw\bank_marketing.csv --output-dir .\outputs
+python -m taxi_analytics.pipeline --months 2024-01 2024-02 2024-03
 ```
 
-The pipeline uses Spark DataFrame filters and aggregations, a Spark SQL query,
-a window-based ranking, a deterministic 80/20 hash holdout, and Spark ML
-pipelines for logistic regression and random forest. Median imputers and
-categorical indexers are fitted on the training partition only. Exact duplicate
-rows are removed to prevent copies of identical observations crossing the
-holdout boundary. `unknown` categories are retained; missing numeric values
-are imputed within the training pipeline. The `pdays = -1` convention is kept,
-and an additional indicator flags prior contact.
+The monthly source files are downloaded under `data/raw/taxi/`. To use
+pre-downloaded data or a different Spark master:
 
-Generated artifacts in `outputs/`:
+```powershell
+python -m taxi_analytics.pipeline `
+  --months 2024-01 2024-02 `
+  --raw-dir .\data\raw\taxi `
+  --output-dir .\outputs\taxi `
+  --master "local[*]"
+```
 
-- `data_profile.json`, `numeric_summary.csv`, `target_balance.csv`
-- `numeric_distributions.csv`, `numeric_correlations.csv`
-- `conversion_by_job.csv`, `conversion_by_month.csv`
-- `dashboard_data.csv`, `insights.json`
-- `model_comparison.csv`, `model_metrics.json`, `model_predictions.csv`
-- `feature_importance.csv` (random-forest importance or absolute logistic coefficient)
+For cluster execution, use a configured master (for example
+`--master spark://<host>:7077`) and stage the same Parquet/CSV input paths on
+storage visible to the Spark driver and executors. Local mode uses all
+available cores. Increase selected months to grow the distributed Spark input.
+
+### Spark transformations and outputs
+
+The pipeline:
+
+1. Reads official monthly Parquet files using Spark; unions month schemas.
+2. Measures row counts, nulls, invalid values, and schema; cleans domain
+   outliers and derives trip-time features.
+3. Broadcast-joins the TLC zone dimension twice (pickup and dropoff).
+4. Uses DataFrame aggregations, Spark SQL, and window-ranked zone/route
+   summaries; computes summary statistics and Pearson correlations.
+5. Creates a deterministic 80/20 hash holdout and uses bounded samples for
+   Spark ML training/evaluation to control runtime while all selected trips
+   participate in preprocessing and aggregate analysis.
+6. Compares Linear Regression with Random Forest Regression using RMSE, MAE,
+   and R². Feature imputers, indexers, and encoders are fit only on training
+   data.
+7. Exports compact dashboard artifacts; it never collects the full raw trip
+   dataset to the driver.
+
+Generated files in `outputs/taxi/` include:
+
+- `data_profile.json`, `key_findings.json`, `numeric_summary.csv`
+- `daily_trips.csv`, `hourly_demand.csv`, `pickup_zones.csv`
+- `popular_routes.csv`, `payment_types.csv`, `numeric_correlations.csv`
+- `model_metrics.json`, `model_comparison.csv`, `model_predictions.csv`
+- `feature_importance.csv`
 
 ## Run the dashboard
 
-Run the Spark pipeline once, then launch the interactive dashboard:
+After the pipeline completes:
 
 ```powershell
 python -m streamlit run app.py
 ```
 
-Using `python -m streamlit` avoids PowerShell `CommandNotFoundException` when
-the Python `Scripts` directory containing the `streamlit` launcher is not on
-`PATH`. Run this from the project root using the same Python environment where
-the dependencies were installed.
+Use the date, borough, and hour filters to explore demand. The dashboard
+shows volume, fare, distance, and duration KPIs, busy zones/routes, payment
+mix, correlations, feature importance, model comparison, and a sampled
+actual-versus-predicted fare chart.
 
-The dashboard offers job/month filters, observed conversion KPIs and plots,
-held-out model metrics, a configurable probability threshold, a confusion
-matrix, model comparison, and feature analysis. Model precision, recall, and
-F1 respond to the filters and threshold; displayed ROC-AUC is for the complete
-holdout.
+## Presentation and demo
 
-## Presentation / demo flow
+Follow the 6-slide outline and run checklist in
+[PRESENTATION.md](./PRESENTATION.md). Briefly run a single month first; then
+show the multi-month command to demonstrate scaling the real input volume.
 
-1. State the campaign question and the UCI source/target.
-2. Show the architecture: UCI CSV → typed Spark load and QA → Spark SQL/window
-   summaries → leakage-aware Spark ML → CSV/JSON exports → Streamlit.
-3. Explain nulls, duplicate handling, the `pdays = -1` convention, and why
-   `duration` is excluded.
-4. Run the pipeline and compare logistic regression with random forest using
-   ROC-AUC, precision, recall, F1, and confusion counts.
-5. Launch Streamlit, filter job/month segments, adjust the threshold, and
-   review conversion patterns and feature analysis.
-6. Close with the limitations: observational historical data, no client ID,
-   class imbalance, and no causal interpretation of feature importance.
+## Limitations
+
+This is trip-level observational data, not a random sample of all travel.
+Cleaning thresholds affect results; borough and route aggregates are not
+causal. The fare model estimates a metered fare after the trip using trip
+duration/distance and route, not a pre-trip price quote. It uses sampled
+training and test partitions to manage laptop runtime; always inspect the
+reported sample sizes and validate on a later month before operational use.

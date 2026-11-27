@@ -1,71 +1,68 @@
-# Presentation and Demo: Bank Marketing Analytics
+# Presentation / Demo: NYC Taxi Big Data Analytics
 
 **Team:** `[Add 5–7 student names before submission]`
-**Project:** Predicting term-deposit subscriptions from bank marketing data
-**Dataset:** [UCI Bank Marketing](https://archive.ics.uci.edu/dataset/222/bank+marketing)
+**Project:** NYC TLC Yellow Taxi Big Data Analytics
+**Source:** NYC Taxi & Limousine Commission monthly Parquet trip records
 
-## Suggested 6-slide flow (5–7 minutes)
+## Suggested 6-slide presentation (5–7 minutes)
 
-### 1. Business problem and dataset
+### 1. Problem and scale
 
-- Can historical campaign data help prioritize pre-call outreach?
-- Target: `y` (`yes` / `no`); 45,211 observations and 17 columns.
-- Source: UCI Machine Learning Repository, dataset DOI 10.24432/C5K306.
-- State that the data are observational, not experimental.
+- Analyze taxi demand, fares, durations, routes, and zones.
+- Predict metered fare from trip attributes as a project-specific regression
+  task.
+- Official TLC Parquet records are published monthly; January 2024 is the
+  default example. Selecting more months scales the real data to tens of
+  millions of trips.
 
-### 2. Architecture and Spark pipeline
+### 2. Dataset and architecture
 
-- UCI CSV → typed PySpark DataFrame → data-quality checks and cleaning.
-- Spark DataFrame aggregations, Spark SQL, window ranking, quantiles, and
-  Pearson correlation produce EDA artifacts.
-- Training-only preprocessing → logistic regression and random forest →
-  holdout evaluation → CSV/JSON artifacts → Streamlit.
-- Point to `src/bank_marketing/pipeline.py` and generated `outputs/`.
+- TLC Yellow Taxi Parquet plus the TLC taxi-zone lookup dimension.
+- PySpark Parquet ingestion → domain cleaning/time features → two broadcast
+  zone joins → SQL and distributed aggregations → Spark ML → compact exports
+  → Streamlit.
+- Emphasize that the source is real trip data; no artificial row replication.
 
-### 3. Data quality and EDA findings
+### 3. Spark big-data operations
 
-- Source contains 45,211 rows; after cleaning, 45,211 remain.
-- No exact duplicates or invalid-domain rows in this source copy.
-- 5,289 positive targets (11.7%); missing categorical values are retained as
-  an `unknown` category.
-- Highest observed segment rates: students, 28.7% (938 records); March, 52.0%
-  (477 records). These are descriptive rates, not causal effects.
+- Native Parquet read and multi-month union.
+- DataFrame filters, time feature derivation, aggregation and correlation.
+- Broadcast joins to pickup/dropoff zones.
+- Spark SQL hourly demand, window ranking for pickup zones/routes.
+- Compare `--months 2024-01` against a multi-month run; discuss row counts,
+  runtime, and partition behavior.
 
-### 4. Modeling choices and results
+### 4. EDA and modeling
 
-- Exclude `duration`: it is only known after the call and would leak outcome
-  information into a pre-call prediction.
-- Deterministic hash holdout: 36,076 training and 9,135 test examples.
-- Compare logistic regression (ROC-AUC 0.760, F1 0.247) and random forest
-  (ROC-AUC 0.780, F1 0.258); random forest selected by ROC-AUC.
-- At threshold 0.5, selected-model precision is 0.726 and recall is 0.157.
-  Discuss the imbalanced target and threshold trade-off; accuracy alone would
-  be misleading.
+- Show data-quality/null counts and trips retained.
+- Explain hour-of-day, borough, zone, route, fare, and distance patterns.
+- Compare Linear Regression and Random Forest Regression using RMSE, MAE, R².
+- Exclude total amount, tips, tolls, and other fare components from features.
+- State that the model estimates fare after the trip; it is not an upfront
+  fare quote. Report actual generated scores rather than assumed metrics.
 
 ### 5. Interactive dashboard
 
-- Filter by job and campaign month.
-- Review customer/subscription KPIs, segment-rate charts, and numeric
-  distribution/correlation visuals.
-- Adjust the probability threshold and inspect filtered precision, recall,
-  F1, and confusion matrix.
-- Compare the models and inspect top feature importance.
+- Filter by date, pickup borough, and hour.
+- Show trip KPIs, daily/hourly demand, top pickup zones/routes, payment mix,
+  correlation, and fare-model diagnostics.
 
-### 6. Limitations and conclusion
+### 6. Limitations and takeaways
 
-- Historical data, no stable client identifier, class imbalance, and no
-  temporal validation.
-- Feature importance and segment rates are not causal explanations.
-- A production decision would require temporal/fairness validation,
-  calibration, and monitoring.
+- Public trip data are observational, not causal.
+- Filters and fare estimation bounds affect results.
+- Model uses bounded samples for laptop runtime; validate on later months.
+- Demonstrate scale-up on a configured cluster with shared storage for
+  production-size workloads.
 
-## Live demo checklist
+## Live demo steps
 
-1. From the repository root, run `python -m bank_marketing.pipeline`.
-2. Show Spark's generated profile, SQL/window aggregations, model comparison,
-   and prediction/EDA exports in `outputs/`.
-3. Run `python -m streamlit run app.py` and open the local URL printed by
-   Streamlit.
-4. Change job/month filters and the prediction threshold; explain that
-   filtered confusion metrics change while full-holdout ROC-AUC does not.
-5. Close with the limitations above and show the setup steps in `README.md`.
+1. Run `python -m taxi_analytics.pipeline` for the default real-month download.
+2. Inspect `outputs/taxi/data_profile.json` and Spark aggregate/model artifacts.
+3. Run a larger real workload:
+   `python -m taxi_analytics.pipeline --months 2024-01 2024-02 2024-03`.
+4. Launch `python -m streamlit run app.py`.
+5. Change date/borough/hour controls and explain the relationship between
+   demand, routes, fares, and model errors.
+6. Close with the limitations and next step: validate by later-month temporal
+   holdout, then run on a distributed Spark cluster.

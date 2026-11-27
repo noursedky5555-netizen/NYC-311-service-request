@@ -1,83 +1,73 @@
-# Project Report: Bank Marketing Subscription Analytics
+# Project Report: NYC Taxi Big Data Analytics
 
 ## Problem
 
-Analyze a Portuguese bank's direct-marketing campaign and estimate whether a
-contacted client will subscribe to a term deposit (`y`). The intended modeling
-use is pre-call prioritization, not post-call evaluation.
+Analyze demand, pickup/dropoff patterns, fare distributions, and trip duration
+in the NYC Taxi & Limousine Commission (TLC) Yellow Taxi records. As a
+project-specific ML task, estimate the metered `fare_amount` from trip
+distance, duration, time, vendor, rate code, and pickup/dropoff zones.
 
 ## Dataset
 
-The project uses the 45,211-row Bank Marketing dataset from the UCI Machine
-Learning Repository (ID 222; DOI 10.24432/C5K306). It includes customer,
-campaign, and prior-campaign fields and a binary `yes`/`no` outcome. The
-pipeline downloads the official CSV on first run. Source attribution and dataset details are in [README.md](./README.md).
-The UCI API metadata does not expose a dataset-specific license field for this
-entry, so confirm applicable reuse terms with UCI before redistribution.
+The pipeline downloads the official TLC monthly Yellow Taxi Parquet records
+and TLC taxi-zone lookup. The default month is January 2024; users can select
+multiple months and scale the real input to tens of millions of trips. The
+Parquet source has a wide, vintage-dependent schema; the pipeline checks the
+required fields and records the inferred source schema. No synthetic row
+expansion is used. See [README.md](./README.md) for links, setup, source
+attribution, and current-terms guidance.
 
 ## Methodology
 
-The loader applies a fixed schema and interprets `NaN` as missing. QA measures
-nulls, exact duplicate rows, invalid values, numeric summaries, and target
-balance. Cleaning removes exact duplicates and rows with invalid age, day,
-duration, campaign count, prior-contact count, or target. Missing categories
-are represented as `unknown`. `pdays = -1` is preserved as the source's
-"never previously contacted" sentinel and a separate prior-contact indicator
-is derived. Numeric imputation is fitted inside each model using training data
-only. `duration` is excluded because it is unavailable before the call and is
-explicitly called out by UCI as a leakage risk.
+Spark measures source nulls and invalid values, filters records with missing
+timestamps/zones, nonpositive or extreme trip duration/distance/fare, and
+derives pickup date/hour/day/month/weekend features. The TLC zone dimension is
+broadcast-joined for pickup and dropoff labels. Duplicate trips are not blindly
+removed because repeated field combinations can represent legitimate records.
 
-Two Spark ML pipelines are compared: logistic regression and random forest.
-An exact-row hash assigns a deterministic, approximately 80/20 train/test
-split; removing exact duplicate source rows first prevents identical copies
-from straddling the partitions. The selected model maximizes holdout ROC-AUC,
-with F1 as tie-breaker. Precision, recall, F1, accuracy, and confusion counts
-are also reported. This is a fixed holdout comparison, not a claim of
-hyperparameter optimization or causal inference.
+The project creates grouped demand, zone, route, and payment summaries, plus
+numeric summaries and Pearson correlations. The model uses a deterministic
+80/20 source-row hash split; pipeline imputation and category encoding are fit
+on the training partition only. Linear Regression and Random Forest Regression
+are compared using RMSE, MAE, and R². `total_amount`, tips, tolls, and other
+fare components are excluded as target leakage. Bounded samples control model
+runtime; the full selected source volume is used for Spark quality checks and
+aggregations.
 
 ## Spark usage
 
-PySpark performs typed CSV ingestion, data validation and filtering, group
-aggregations, approximate numeric quantiles, Pearson correlation, Spark SQL
-conversion summaries, window-based job ranking, and model fitting/evaluation.
-Spark exports cleaned dashboard data and compact EDA/model artifacts for
-Streamlit.
+Spark reads Parquet natively, unions multiple months, filters and transforms
+trip records, joins the TLC zone dimension twice with broadcast joins, and
+executes SQL and grouped/window aggregations. Correlation analysis and model
+training/evaluation use Spark ML. The dashboard consumes compact aggregates
+and a bounded prediction sample instead of collecting the full input into
+Pandas.
 
 ## Results
 
-On the downloaded data, the cleaning step retained 45,211 rows; there were no
-exact duplicate rows or invalid-domain rows. The target was imbalanced:
-39,922 `no` and 5,289 `yes` examples (11.7% positive). The descriptive
-highest-rate segments were `student` (28.7%, 938 records) and March (52.0%,
-477 records); these are observational rates, not causal findings.
-
-The deterministic holdout contained 36,076 training and 9,135 test rows. At
-the default 0.5 classification threshold:
-
-| Model | ROC-AUC | Accuracy | Precision | Recall | F1 |
-|---|---:|---:|---:|---:|---:|
-| Logistic regression | 0.760 | 0.897 | 0.759 | 0.147 | 0.247 |
-| Random forest (selected) | 0.780 | 0.897 | 0.726 | 0.157 | 0.258 |
-
-The selected random forest has modest positive-class recall at the default
-threshold, despite a 0.780 ROC-AUC. The dashboard threshold control allows
-precision/recall trade-offs to be inspected; it does not change the reported
-full-holdout ROC-AUC. Re-running the pipeline regenerates these values from
-the source data.
+The January 2024 run processed **2,964,624 source trips**, retaining
+**2,825,499** after cleaning. The selected Random Forest Regression model
+achieved **$3.68 RMSE**, **$1.28 MAE**, and **0.954 R²** on a held-out sample
+of 11,518 trips; its training sample contained 22,787 trips. Linear Regression
+achieved $3.82 RMSE, $1.41 MAE, and 0.950 R² on the same evaluation sample.
+These results use a deterministic target-independent trip-attribute hash
+holdout and bounded samples for laptop memory/runtime. They are generated in
+`outputs/taxi/model_metrics.json` and `model_comparison.csv`; selecting other
+months will change the results.
 
 ## Dashboard
 
-The Streamlit app includes job and campaign-month filters, customer and
-subscription KPIs, conversion charts, model comparison, feature analysis, and
-a test-set confusion matrix recalculated for a selectable probability
-threshold. ROC-AUC is shown for the complete holdout; precision, recall, and
-F1 are recalculated for the selected segments.
+The Streamlit dashboard provides date, borough, and pickup-hour filters;
+trip-volume, average-fare, distance, and duration KPIs; daily/hourly demand
+charts; pickup-zone and route tables; payment mix; numeric correlations; fare
+model comparison; feature importance; and actual-versus-predicted samples.
 
 ## Conclusion and limitations
 
-The project demonstrates a reproducible Spark analytics and classification
-workflow with explicit leakage prevention and an interactive reporting layer.
-The source is historical and observational, contains no stable client ID, may
-have class imbalance, and supports neither causal claims nor production
-deployment decisions without temporal validation, fairness review, calibration,
-and monitoring.
+The project demonstrates a real, scalable Spark workflow over published
+multi-million-row Parquet inputs. Local Spark is the default, and users can
+increase input volume by selecting more months or configure a Spark cluster
+where shared input paths are available. Results are descriptive, sensitive to
+data-quality filters, and not causal. Fare estimation is retrospective
+trip-level estimation, not a customer-facing upfront quote; sampled-model
+metrics need later-month validation before operational decisions.

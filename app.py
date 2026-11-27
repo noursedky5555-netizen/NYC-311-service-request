@@ -1,4 +1,4 @@
-"""Interactive Streamlit dashboard for the generated Bank Marketing artifacts."""
+"""Streamlit dashboard for the NYC TLC Yellow Taxi Spark analytics pipeline."""
 
 from __future__ import annotations
 
@@ -9,251 +9,281 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-OUTPUT_DIR = Path(__file__).resolve().parent / "outputs"
-
-st.set_page_config(page_title="Bank Marketing Analytics", page_icon="📊", layout="wide")
-st.title("Bank Marketing: Term Deposit Analytics")
-st.caption(
-    "Explore the UCI Portuguese bank campaign data and evaluate a pre-call "
-    "subscription model. The post-call duration field is excluded from prediction."
-)
-
-required = [
-    "dashboard_data.csv",
+OUTPUT_DIR = Path(__file__).resolve().parent / "outputs" / "taxi"
+REQUIRED_FILES = [
+    "daily_trips.csv",
+    "hourly_demand.csv",
+    "pickup_zones.csv",
+    "popular_routes.csv",
+    "payment_types.csv",
     "numeric_correlations.csv",
-    "numeric_distributions.csv",
+    "numeric_summary.csv",
+    "data_profile.json",
+    "key_findings.json",
     "model_comparison.csv",
+    "model_metrics.json",
     "model_predictions.csv",
     "feature_importance.csv",
-    "data_profile.json",
-    "model_metrics.json",
-    "insights.json",
 ]
-missing = [name for name in required if not (OUTPUT_DIR / name).is_file()]
+
+st.set_page_config(
+    page_title="NYC Taxi Big Data Analytics", page_icon="🚕", layout="wide"
+)
+st.title("NYC Taxi Trips: Big Data Analytics")
+st.caption(
+    "Explore millions of official NYC TLC Yellow Taxi trips processed with "
+    "PySpark. Analytics below are derived from the selected real trip-data months."
+)
+
+missing = [name for name in REQUIRED_FILES if not (OUTPUT_DIR / name).is_file()]
 if missing:
     st.error(
-        "Pipeline outputs are missing: "
+        "Spark outputs are missing: "
         + ", ".join(missing)
-        + ". Run `python -m bank_marketing.pipeline` first."
+        + ". Run `python -m taxi_analytics.pipeline` first."
     )
     st.stop()
 
-data = pd.read_csv(OUTPUT_DIR / "dashboard_data.csv")
+daily = pd.read_csv(OUTPUT_DIR / "daily_trips.csv", parse_dates=["pickup_date"])
+hourly = pd.read_csv(OUTPUT_DIR / "hourly_demand.csv")
+zones = pd.read_csv(OUTPUT_DIR / "pickup_zones.csv")
+routes = pd.read_csv(OUTPUT_DIR / "popular_routes.csv")
+payments = pd.read_csv(OUTPUT_DIR / "payment_types.csv")
+correlations = pd.read_csv(OUTPUT_DIR / "numeric_correlations.csv")
+numeric_summary = pd.read_csv(OUTPUT_DIR / "numeric_summary.csv")
+profile = json.loads((OUTPUT_DIR / "data_profile.json").read_text(encoding="utf-8"))
+findings = json.loads((OUTPUT_DIR / "key_findings.json").read_text(encoding="utf-8"))
+metrics = json.loads((OUTPUT_DIR / "model_metrics.json").read_text(encoding="utf-8"))
 comparison = pd.read_csv(OUTPUT_DIR / "model_comparison.csv")
 predictions = pd.read_csv(OUTPUT_DIR / "model_predictions.csv")
 importance = pd.read_csv(OUTPUT_DIR / "feature_importance.csv")
-correlations = pd.read_csv(OUTPUT_DIR / "numeric_correlations.csv")
-distributions = pd.read_csv(OUTPUT_DIR / "numeric_distributions.csv")
-profile = json.loads((OUTPUT_DIR / "data_profile.json").read_text(encoding="utf-8"))
-model_metrics = json.loads(
-    (OUTPUT_DIR / "model_metrics.json").read_text(encoding="utf-8")
-)
-insights = json.loads((OUTPUT_DIR / "insights.json").read_text(encoding="utf-8"))
 
+date_min = daily["pickup_date"].min().date()
+date_max = daily["pickup_date"].max().date()
+borough_options = sorted(daily["pickup_borough"].dropna().unique().tolist())
 with st.sidebar:
-    st.header("Explore segments")
-    jobs = sorted(data["job"].dropna().unique().tolist())
-    months = sorted(data["month"].dropna().unique().tolist())
-    selected_jobs = st.multiselect("Job", jobs, default=jobs)
-    selected_months = st.multiselect("Campaign month", months, default=months)
-    threshold = st.slider(
-        "Positive prediction threshold", min_value=0.05, max_value=0.95, value=0.50, step=0.05
+    st.header("Trip filters")
+    date_range = st.date_input(
+        "Pickup date range",
+        value=(date_min, date_max),
+        min_value=date_min,
+        max_value=date_max,
     )
+    boroughs = st.multiselect(
+        "Pickup borough", borough_options, default=borough_options
+    )
+    selected_hours = st.slider("Pickup hour", min_value=0, max_value=23, value=(0, 23))
 
-filtered = data[data["job"].isin(selected_jobs) & data["month"].isin(selected_months)]
-filtered_predictions = predictions[
-    predictions["job"].isin(selected_jobs) & predictions["month"].isin(selected_months)
-].copy()
-filtered_predictions["predicted"] = (
-    filtered_predictions["subscription_probability"] >= threshold
-).astype(int)
+if isinstance(date_range, tuple) and len(date_range) == 2:
+    start_date, end_date = date_range
+else:
+    start_date = end_date = date_range
+daily_filtered = daily[
+    daily["pickup_date"].dt.date.between(start_date, end_date)
+    & daily["pickup_borough"].isin(boroughs)
+]
+hourly_filtered = hourly[
+    hourly["pickup_borough"].isin(boroughs)
+    & hourly["pickup_hour"].between(selected_hours[0], selected_hours[1])
+]
+zone_filtered = zones[zones["pickup_borough"].isin(boroughs)]
+route_filtered = routes[routes["pickup_borough"].isin(boroughs)]
 
-total = len(filtered)
-subscriptions = int((filtered["y"] == "yes").sum())
-conversion_rate = subscriptions / total if total else 0.0
-average_age = float(filtered["age"].mean()) if total else 0.0
-average_campaign_contacts = float(filtered["campaign"].mean()) if total else 0.0
+trip_count = int(daily_filtered["trips"].sum())
+fare_sum = float(daily_filtered["total_fare_amount"].sum())
+distance_sum = float(daily_filtered["total_distance_miles"].sum())
+duration_sum = float(daily_filtered["total_duration_minutes"].sum())
+average_fare = fare_sum / trip_count if trip_count else 0
+average_distance = distance_sum / trip_count if trip_count else 0
+average_duration = duration_sum / trip_count if trip_count else 0
 
 kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-kpi1.metric("Customers in selection", f"{total:,}")
-kpi2.metric("Observed subscriptions", f"{subscriptions:,}")
-kpi3.metric("Observed subscription rate", f"{conversion_rate:.1%}")
-kpi4.metric("Average campaign contacts", f"{average_campaign_contacts:.2f}")
+kpi1.metric("Trips in selection", f"{trip_count:,}")
+kpi2.metric("Mean metered fare", f"${average_fare:,.2f}")
+kpi3.metric("Mean trip distance", f"{average_distance:.2f} mi")
+kpi4.metric("Mean trip duration", f"{average_duration:.1f} min")
+st.caption(
+    f"Source rows: {profile['source_rows']:,} · Valid trips after filtering: "
+    f"{profile['cleaned_rows']:,} · Months: {', '.join(metrics['months'])}"
+)
 
 st.subheader("Key findings")
-finding_col1, finding_col2, finding_col3 = st.columns(3)
-finding_col1.metric(
-    "Overall subscription rate",
-    f"{insights['overall_subscription_rate']:.1%}",
+finding1, finding2, finding3 = st.columns(3)
+finding1.metric("All cleaned trips", f"{findings['trips']:,}")
+finding2.metric("Overall median fare", f"${findings['median_fare']:.2f}")
+finding3.metric(
+    "Mean trip distance", f"{findings['average_distance_miles']:.2f} miles"
 )
-finding_col2.metric(
-    "Highest-rate job segment",
-    insights["highest_job_subscription_rate"]["job"],
-    f"{insights['highest_job_subscription_rate']['subscription_rate']:.1%} · "
-    f"{insights['highest_job_subscription_rate']['customers']:,} customers",
-)
-finding_col3.metric(
-    "Highest-rate campaign month",
-    insights["highest_month_subscription_rate"]["month"],
-    f"{insights['highest_month_subscription_rate']['subscription_rate']:.1%} · "
-    f"{insights['highest_month_subscription_rate']['customers']:,} customers",
-)
-st.caption(insights["interpretation"])
+st.caption(findings["interpretation"])
 
-chart_col1, chart_col2 = st.columns(2)
-with chart_col1:
-    st.subheader("Subscription rate by job")
-    if total:
-        job_view = (
-            filtered.assign(subscribed=filtered["y"].eq("yes").astype(int))
-            .groupby("job", as_index=False)
-            .agg(customers=("y", "size"), subscription_rate=("subscribed", "mean"))
-            .sort_values("subscription_rate", ascending=False)
-        )
-        st.plotly_chart(
-            px.bar(
-                job_view,
-                x="job",
-                y="subscription_rate",
-                color="customers",
-                hover_data=["customers"],
-                labels={"subscription_rate": "Subscription rate"},
-            ),
-            width="stretch",
-        )
+left, right = st.columns(2)
+with left:
+    st.subheader("Daily trip demand")
+    if daily_filtered.empty:
+        st.info("No trips match the selected date and borough filters.")
     else:
-        st.info("No records match the selected filters.")
-
-with chart_col2:
-    st.subheader("Subscription rate by campaign month")
-    if total:
-        month_view = (
-            filtered.assign(subscribed=filtered["y"].eq("yes").astype(int))
-            .groupby("month", as_index=False)
-            .agg(customers=("y", "size"), subscription_rate=("subscribed", "mean"))
+        daily_chart = (
+            daily_filtered.groupby("pickup_date", as_index=False)["trips"]
+            .sum()
+            .sort_values("pickup_date")
         )
         st.plotly_chart(
-            px.bar(
-                month_view,
-                x="month",
-                y="subscription_rate",
-                color="customers",
-                hover_data=["customers"],
-                labels={"subscription_rate": "Subscription rate"},
+            px.line(
+                daily_chart,
+                x="pickup_date",
+                y="trips",
+                markers=True,
+                labels={"pickup_date": "Pickup date", "trips": "Trips"},
             ),
             width="stretch",
         )
+with right:
+    st.subheader("Pickup demand by hour")
+    if hourly_filtered.empty:
+        st.info("No trips match the selected borough and hour filters.")
     else:
-        st.info("No records match the selected filters.")
-
-st.subheader("Model evaluation on the held-out test set")
-st.caption(
-    f"Selected model: {model_metrics['selected_model']} · "
-    f"threshold is adjustable for the confusion-matrix metrics below."
-)
-if not filtered_predictions.empty:
-    actual = filtered_predictions["label"].astype(int)
-    predicted = filtered_predictions["predicted"].astype(int)
-    tp = int(((actual == 1) & (predicted == 1)).sum())
-    fp = int(((actual == 0) & (predicted == 1)).sum())
-    tn = int(((actual == 0) & (predicted == 0)).sum())
-    fn = int(((actual == 1) & (predicted == 0)).sum())
-    precision = tp / (tp + fp) if tp + fp else 0.0
-    recall = tp / (tp + fn) if tp + fn else 0.0
-    f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("ROC-AUC (full holdout)", f"{model_metrics['selected_model_metrics']['roc_auc']:.3f}")
-    m2.metric("Filtered precision", f"{precision:.3f}")
-    m3.metric("Filtered recall", f"{recall:.3f}")
-    m4.metric("Filtered F1", f"{f1:.3f}")
-    cm_col, importance_col = st.columns(2)
-    with cm_col:
-        st.markdown("**Filtered confusion matrix**")
-        st.dataframe(
-            pd.DataFrame(
-                [[tn, fp], [fn, tp]],
-                index=["Actual no", "Actual yes"],
-                columns=["Predicted no", "Predicted yes"],
-            ),
-            width="stretch",
-        )
-    with importance_col:
-        st.markdown("**Top model features**")
+        hour_chart = hourly_filtered.groupby("pickup_hour", as_index=False)[
+            "trips"
+        ].sum()
         st.plotly_chart(
             px.bar(
-                importance.head(15).sort_values("importance"),
-                x="importance",
-                y="feature",
-                orientation="h",
-                labels={"importance": "Importance / absolute coefficient"},
+                hour_chart,
+                x="pickup_hour",
+                y="trips",
+                labels={"pickup_hour": "Hour of day", "trips": "Trips"},
             ),
             width="stretch",
         )
-else:
-    st.info("No held-out predictions match the selected filters.")
 
-st.subheader("Model comparison")
-st.dataframe(comparison, width="stretch", hide_index=True)
-
-st.subheader("Numeric patterns")
-pattern_col1, pattern_col2 = st.columns(2)
-with pattern_col1:
-    selected_numeric = st.selectbox(
-        "Distribution to inspect",
-        ["age", "balance", "campaign", "duration", "pdays", "previous"],
-    )
-    if total:
-        st.plotly_chart(
-            px.histogram(
-                filtered,
-                x=selected_numeric,
-                nbins=30,
-                title=f"{selected_numeric} distribution",
-            ),
-            width="stretch",
-        )
-    st.caption(
-        "Approximate quartiles and range across the cleaned data (Spark "
-        "approxQuantile, 1% relative error)."
-    )
-    st.dataframe(distributions, width="stretch", hide_index=True)
-with pattern_col2:
-    correlation_pivot = correlations.pivot(
-        index="feature", columns="other_feature", values="pearson_correlation"
-    )
+left, right = st.columns(2)
+with left:
+    st.subheader("Busiest pickup zones")
     st.plotly_chart(
-        px.imshow(
-            correlation_pivot,
-            text_auto=".2f",
-            zmin=-1,
-            zmax=1,
-            color_continuous_scale="RdBu",
-            title="Pearson correlation (numeric fields)",
+        px.bar(
+            zone_filtered.head(15).sort_values("pickup_trips"),
+            x="pickup_trips",
+            y="pickup_zone",
+            color="pickup_borough",
+            orientation="h",
+            labels={"pickup_trips": "Trips", "pickup_zone": "TLC pickup zone"},
+        ),
+        width="stretch",
+    )
+with right:
+    st.subheader("Most common taxi routes")
+    route_display = route_filtered.head(12).copy()
+    route_display["route"] = (
+        route_display["pickup_zone"].astype(str)
+        + " → "
+        + route_display["dropoff_zone"].astype(str)
+    )
+    st.dataframe(
+        route_display[
+            ["route", "pickup_borough", "dropoff_borough", "trips", "average_fare"]
+        ].rename(
+            columns={
+                "pickup_borough": "from",
+                "dropoff_borough": "to",
+                "average_fare": "mean fare ($)",
+            }
+        ),
+        width="stretch",
+        hide_index=True,
+    )
+
+st.subheader("Fare prediction model")
+model_col1, model_col2 = st.columns([1, 1])
+selected = metrics["selected_model_metrics"]
+with model_col1:
+    st.markdown(
+        f"**Selected:** {metrics['selected_model']} · trained on "
+        f"{metrics['training_sample_rows']:,} Spark-sampled trips; evaluated on "
+        f"{metrics['evaluation_sample_rows']:,} held-out trips."
+    )
+    a, b, c = st.columns(3)
+    a.metric("RMSE", f"${selected['rmse']:.2f}")
+    b.metric("MAE", f"${selected['mae']:.2f}")
+    c.metric("R²", f"{selected['r2']:.3f}")
+    st.caption(
+        "Fare prediction uses trip distance, duration, time and route. Other fare "
+        "components (tips, tolls, total amount) are excluded to avoid leakage."
+    )
+    st.dataframe(comparison, width="stretch", hide_index=True)
+with model_col2:
+    st.plotly_chart(
+        px.bar(
+            importance.head(15).sort_values("importance"),
+            x="importance",
+            y="feature",
+            orientation="h",
+            labels={"importance": "Random-forest importance"},
         ),
         width="stretch",
     )
 
-with st.expander("Data quality and methodology"):
-    st.write(
-        f"Rows before cleaning: {profile['rows_before_cleaning']:,}; "
-        f"rows after cleaning: {profile.get('rows_after_cleaning', 0):,}; "
-        f"exact duplicates found: {profile['exact_duplicate_rows']:,}."
+st.subheader("Prediction error sample")
+st.plotly_chart(
+    px.scatter(
+        predictions.sample(min(8000, len(predictions)), random_state=42),
+        x="fare_amount",
+        y="prediction",
+        color="trip_distance",
+        hover_data=["trip_duration_minutes", "pickup_borough", "dropoff_borough"],
+        labels={"fare_amount": "Actual fare ($)", "prediction": "Predicted fare ($)"},
+    ).add_shape(
+        type="line",
+        x0=0,
+        x1=float(predictions["fare_amount"].quantile(0.99)),
+        y0=0,
+        y1=float(predictions["fare_amount"].quantile(0.99)),
+        line={"dash": "dash", "color": "gray"},
+    ),
+    width="stretch",
+)
+
+eda_left, eda_right = st.columns(2)
+with eda_left:
+    st.subheader("Payment type mix")
+    payment_labels = {1: "Credit card", 2: "Cash", 3: "No charge", 4: "Dispute", 5: "Unknown", 6: "Voided"}
+    payments["payment_label"] = payments["payment_type"].map(payment_labels).fillna(
+        payments["payment_type"].astype(str)
     )
-    st.write(
-        "Missing values by source column",
-        pd.DataFrame(
-            profile["missing_values_by_column"].items(),
-            columns=["column", "missing_values"],
+    st.plotly_chart(
+        px.pie(payments, values="trips", names="payment_label", hole=0.4),
+        width="stretch",
+    )
+with eda_right:
+    st.subheader("Numeric feature correlations")
+    matrix = correlations.pivot(
+        index="feature", columns="other_feature", values="pearson_correlation"
+    )
+    st.plotly_chart(
+        px.imshow(
+            matrix,
+            text_auto=".2f",
+            zmin=-1,
+            zmax=1,
+            color_continuous_scale="RdBu",
         ),
-    )
-    st.write(
-        "Numeric model imputers are fitted within the training pipeline only. "
-        "Categorical nulls are retained as an explicit `unknown` category. "
-        "The original `pdays = -1` means no prior contact; a separate "
-        "`previously_contacted` feature preserves that meaning."
+        width="stretch",
     )
 
+with st.expander("Data quality, schema, and modeling details"):
+    st.write(
+        f"Invalid trips removed: {profile['rows_removed']:,}. "
+        f"Zone dimension was joined twice (pickup and dropoff) using Spark "
+        f"broadcast joins. Month files: {', '.join(metrics['months'])}."
+    )
+    st.write(
+        pd.DataFrame(
+            [{"check": key, "rows": value} for key, value in profile["domain_check_counts"].items()]
+        )
+    )
+    st.write(pd.DataFrame(profile["null_counts"].items(), columns=["column", "nulls"]))
+    st.write("Inferred Parquet source schema", pd.DataFrame(profile["source_schema"]))
+    st.write("Spark numeric summary", numeric_summary)
+
 st.caption(
-    "Source: UCI Machine Learning Repository, Bank Marketing "
-    "(Moro, Rita & Cortez, DOI: 10.24432/C5K306)."
+    "Data: NYC Taxi & Limousine Commission (TLC), Yellow Taxi Trip Records. "
+    "See README for source links and reuse terms."
 )
