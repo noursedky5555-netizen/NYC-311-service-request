@@ -7,6 +7,10 @@ data/raw/*
 !data/raw/.gitkeep
 outputs/*
 !outputs/.gitkeep
+!outputs/nyc311/
+outputs/nyc311/*
+!outputs/nyc311/*.csv
+!outputs/nyc311/*.json
 spark-warehouse/
 metastore_db/
 derby.log

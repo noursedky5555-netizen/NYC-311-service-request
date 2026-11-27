@@ -1,0 +1,95 @@
+{
+  "source_rows": 794394,
+  "duplicate_unique_keys": 0,
+  "source_schema": [
+    {
+      "column": "unique_key",
+      "type": "string"
+    },
+    {
+      "column": "created_date",
+      "type": "string"
+    },
+    {
+      "column": "closed_date",
+      "type": "string"
+    },
+    {
+      "column": "agency",
+      "type": "string"
+    },
+    {
+      "column": "agency_name",
+      "type": "string"
+    },
+    {
+      "column": "complaint_type",
+      "type": "string"
+    },
+    {
+      "column": "descriptor",
+      "type": "string"
+    },
+    {
+      "column": "location_type",
+      "type": "string"
+    },
+    {
+      "column": "incident_zip",
+      "type": "string"
+    },
+    {
+      "column": "borough",
+      "type": "string"
+    },
+    {
+      "column": "open_data_channel_type",
+      "type": "string"
+    },
+    {
+      "column": "latitude",
+      "type": "string"
+    },
+    {
+      "column": "longitude",
+      "type": "string"
+    }
+  ],
+  "null_counts": {
+    "unique_key": 0,
+    "created_date": 0,
+    "closed_date": 9255,
+    "agency": 0,
+    "agency_name": 0,
+    "complaint_type": 0,
+    "descriptor": 5360,
+    "location_type": 98095,
+    "incident_zip": 9243,
+    "borough": 0,
+    "open_data_channel_type": 0,
+    "latitude": 13905,
+    "longitude": 13905
+  },
+  "domain_check_counts": {
+    "missing_unique_key": 0,
+    "missing_created_date": 0,
+    "unparseable_created_date": 0,
+    "closed_before_created": 382,
+    "invalid_latitude": 0,
+    "invalid_longitude": 0
+  },
+  "months": [
+    "2024-01",
+    "2024-02",
+    "2024-03"
+  ],
+  "monthly_source_rows": {
+    "2024-01": 287253,
+    "2024-02": 240474,
+    "2024-03": 266667
+  },
+  "cleaned_rows": 794012,
+  "rows_removed": 382,
+  "closed_rows": 784757,
+  "open_rows": 9255
+}

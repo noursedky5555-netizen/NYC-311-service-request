@@ -1,0 +1,60 @@
+{
+  "selected_model": "LogisticRegression",
+  "selected_model_metrics": {
+    "model": "LogisticRegression",
+    "roc_auc": 0.9538453055262311,
+    "pr_auc": 0.9892584534147052,
+    "accuracy": 0.8930127481039213,
+    "precision": 0.9232449297971919,
+    "recall": 0.9461609177025461,
+    "f1": 0.9345624666890385,
+    "true_positive": 23672,
+    "false_positive": 1968,
+    "true_negative": 3998,
+    "false_negative": 1347
+  },
+  "model_comparison": [
+    {
+      "model": "LogisticRegression",
+      "roc_auc": 0.9538453055262311,
+      "pr_auc": 0.9892584534147052,
+      "accuracy": 0.8930127481039213,
+      "precision": 0.9232449297971919,
+      "recall": 0.9461609177025461,
+      "f1": 0.9345624666890385,
+      "true_positive": 23672,
+      "false_positive": 1968,
+      "true_negative": 3998,
+      "false_negative": 1347
+    },
+    {
+      "model": "RandomForestClassifier",
+      "roc_auc": 0.9359636324398821,
+      "pr_auc": 0.985016214638583,
+      "accuracy": 0.8355010488946264,
+      "precision": 0.8346660395108184,
+      "recall": 0.992965346336784,
+      "f1": 0.9069601883796068,
+      "true_positive": 24843,
+      "false_positive": 4921,
+      "true_negative": 1045,
+      "false_negative": 176
+    }
+  ],
+  "train_rows": 62951,
+  "test_rows": 30985,
+  "train_start": "2024-01-01 00:00:00",
+  "train_end": "2024-03-13 20:17:28",
+  "test_start": "2024-03-13 20:17:28",
+  "test_end": "2024-03-31 23:59:36",
+  "split_method": "chronological 80/20 timestamp split; bounded sampling for local model runtime",
+  "target": "closed within seven days (closed requests only)",
+  "leakage_control": "Only fields known at request creation and creation-time features are model inputs; closed_date and resolution time are excluded.",
+  "months": [
+    "2024-01",
+    "2024-02",
+    "2024-03"
+  ],
+  "source_rows": 794394,
+  "cleaned_rows": 794012
+}

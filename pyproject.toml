@@ -17,5 +17,8 @@ dependencies = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.poetry]
+packages = [{ include = "nyc311", from = "src" }]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

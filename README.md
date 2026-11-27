@@ -176,6 +176,16 @@ closure KPIs; daily volume; complaint and borough response charts; time
 heatmap; geospatial request sample; ZIP/agency tables; model metrics,
 comparison, scores, and feature importance.
 
+### Deploy to Streamlit Community Cloud
+
+The repository includes the generated Q1 2024 dashboard artifacts under
+`outputs/nyc311/`, so the hosted dashboard can start without downloading the
+source dataset or launching Spark. In Streamlit Community Cloud, select
+`app.py` as the entry point and the repository's `main` branch. The
+`pyproject.toml` package mapping is needed because the Python package lives
+under `src/nyc311`. To publish a refreshed data snapshot, rerun the Spark
+pipeline and commit the updated `outputs/nyc311/` CSV and JSON files.
+
 ## Testing
 
 ```powershell

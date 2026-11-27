@@ -1,0 +1,9 @@
+{
+  "requests": 794012,
+  "closed_requests": 784757,
+  "open_requests": 9255,
+  "mean_resolution_hours": 317.0040069141009,
+  "median_resolution_hours": 12.666666666666666,
+  "resolved_within_7d_rate": 0.8100596745234512,
+  "interpretation": "Resolution rates are descriptive. Open cases are not used in resolution-time statistics; right-censoring can bias averages."
+}
