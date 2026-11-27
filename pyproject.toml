@@ -3,14 +3,14 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "nyc-taxi-big-data"
+name = "nyc-311-analytics"
 version = "1.0.0"
-description = "Scalable PySpark analytics and fare prediction on NYC TLC trip records"
+description = "Scalable PySpark analytics and resolution-time modeling for NYC 311 requests"
 requires-python = ">=3.10"
 dependencies = [
     "pyspark>=3.5,<4",
     "pandas>=2.0",
-    "plotly>=5.18",
+    "plotly>=5.24",
     "streamlit>=1.50",
 ]
 

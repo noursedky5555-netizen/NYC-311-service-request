@@ -1,68 +1,73 @@
-# Presentation / Demo: NYC Taxi Big Data Analytics
+# Presentation / Demo: NYC 311 Service Request Analytics
 
 **Team:** `[Add 5–7 student names before submission]`
-**Project:** NYC TLC Yellow Taxi Big Data Analytics
-**Source:** NYC Taxi & Limousine Commission monthly Parquet trip records
+**Project:** NYC 311 complaint demand and resolution analytics
+**Dataset:** NYC Open Data, 311 Service Requests from 2020 to Present
 
-## Suggested 6-slide presentation (5–7 minutes)
+## Six-slide flow (5–7 minutes)
 
-### 1. Problem and scale
+### 1. Problem
 
-- Analyze taxi demand, fares, durations, routes, and zones.
-- Predict metered fare from trip attributes as a project-specific regression
-  task.
-- Official TLC Parquet records are published monthly; January 2024 is the
-  default example. Selecting more months scales the real data to tens of
-  millions of trips.
+- How do request volume and resolution times differ across complaint types,
+  agencies, boroughs, and time?
+- Can request-time fields estimate whether a closed request resolves within
+  seven days?
+- Explain this is exploratory service analytics, not a city SLA audit.
 
-### 2. Dataset and architecture
+### 2. Dataset and scale
 
-- TLC Yellow Taxi Parquet plus the TLC taxi-zone lookup dimension.
-- PySpark Parquet ingestion → domain cleaning/time features → two broadcast
-  zone joins → SQL and distributed aggregations → Spark ML → compact exports
-  → Streamlit.
-- Emphasize that the source is real trip data; no artificial row replication.
+- NYC Open Data Socrata dataset `erm2-nwe9`, published from 2020 onward.
+- Default extraction: 794,394 records across Q1 2024; extend the months to
+  process millions of real requests.
+- Monthly date filters and 50K-row API pages are cached as CSV partitions.
 
-### 3. Spark big-data operations
+### 3. Spark architecture
 
-- Native Parquet read and multi-month union.
-- DataFrame filters, time feature derivation, aggregation and correlation.
-- Broadcast joins to pickup/dropoff zones.
-- Spark SQL hourly demand, window ranking for pickup zones/routes.
-- Compare `--months 2024-01` against a multi-month run; discuss row counts,
-  runtime, and partition behavior.
+- API paging → Spark CSV ingestion → timestamp/coordinate QA → feature
+  derivation → Spark aggregations/SQL/windows → chronological Spark ML →
+  compact exports → Streamlit.
+- Highlight null/domain checks, request-time feature engineering, and the
+  full-record aggregate pipeline vs. bounded model samples.
 
-### 4. EDA and modeling
+### 4. EDA and data-quality findings
 
-- Show data-quality/null counts and trips retained.
-- Explain hour-of-day, borough, zone, route, fare, and distance patterns.
-- Compare Linear Regression and Random Forest Regression using RMSE, MAE, R².
-- Exclude total amount, tips, tolls, and other fare components from features.
-- State that the model estimates fare after the trip; it is not an upfront
-  fare quote. Report actual generated scores rather than assumed metrics.
+- Show source vs retained rows, duplicate keys, nulls, and coordinate checks.
+- Explore complaint types, borough volume, request-hour patterns, ZIP
+  hotspots, and closure times.
+- Q1 2024 top categories included Illegal Parking (123K), Heat/Hot Water
+  (106K), and Residential Noise (68K).
+- Median closure time was about 12.7 hours vs a 317-hour mean, showing a
+  long-tailed distribution.
+- Note open requests are still included in volume, but not closed-time
+  statistics.
 
-### 5. Interactive dashboard
+### 5. ML and dashboard demo
 
-- Filter by date, pickup borough, and hour.
-- Show trip KPIs, daily/hourly demand, top pickup zones/routes, payment mix,
-  correlation, and fare-model diagnostics.
+- Target: closed within seven days (a project-selected threshold, not an
+  official service commitment).
+- Compare logistic regression and random forest with ROC-AUC, PR-AUC,
+  precision, recall, and F1 on later-created requests.
+- On the Q1 sample, logistic regression reached 0.954 ROC-AUC and 0.946
+  recall; explain the roughly 81% positive-class base rate.
+- Show date/borough/complaint/hour controls and the map/table/model outputs.
+- Exclude closed date and resolution hours from predictors.
 
-### 6. Limitations and takeaways
+### 6. Limitations and next steps
 
-- Public trip data are observational, not causal.
-- Filters and fare estimation bounds affect results.
-- Model uses bounded samples for laptop runtime; validate on later months.
-- Demonstrate scale-up on a configured cluster with shared storage for
-  production-size workloads.
+- Data is observational and changes over time; extraction counts are
+  snapshot-specific.
+- Closure time has right-censoring from open cases; agency rankings are not
+  causal.
+- Validate on longer future periods and distributed Spark infrastructure
+  before any operational use.
 
-## Live demo steps
+## Live demo
 
-1. Run `python -m taxi_analytics.pipeline` for the default real-month download.
-2. Inspect `outputs/taxi/data_profile.json` and Spark aggregate/model artifacts.
-3. Run a larger real workload:
-   `python -m taxi_analytics.pipeline --months 2024-01 2024-02 2024-03`.
+1. `python -m nyc311.pipeline` downloads/processes the default quarter.
+2. Show per-month API partitions, Spark profile, aggregate outputs, and
+   chronological model metrics.
+3. Scale source volume with:
+   `python -m nyc311.pipeline --start-month 2024-01 --end-month 2024-12`.
 4. Launch `python -m streamlit run app.py`.
-5. Change date/borough/hour controls and explain the relationship between
-   demand, routes, fares, and model errors.
-6. Close with the limitations and next step: validate by later-month temporal
-   holdout, then run on a distributed Spark cluster.
+5. Filter borough/complaint/date/hour and explain findings and model
+   limitations.
